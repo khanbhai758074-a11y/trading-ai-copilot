@@ -698,6 +698,9 @@ def calculate_bias_from_structure(structure):
 
 
 def calculate_multi_timeframe_bias(all_structures):
+    """
+    Weighted multi-timeframe directional bias.
+    """
 
     total_weight = 0
     weighted_score = 0
@@ -766,7 +769,11 @@ async def multi_timeframe_bias(symbol: str):
             }
 
             try:
-                response = await client.get(url, params=params)
+                response = await client.get(
+                    url,
+                    params=params
+                )
+
                 response.raise_for_status()
 
                 result = response.json()
@@ -778,7 +785,9 @@ async def multi_timeframe_bias(symbol: str):
                     }
                     continue
 
-                candles = list(reversed(result["values"]))
+                candles = list(
+                    reversed(result["values"])
+                )
 
                 structures[timeframe] = detect_advanced_structure(
                     candles
@@ -791,7 +800,9 @@ async def multi_timeframe_bias(symbol: str):
                     "error": str(e),
                 }
 
-    bias_result = calculate_multi_timeframe_bias(structures)
+    bias_result = calculate_multi_timeframe_bias(
+        structures
+    )
 
     return {
         "symbol": symbol.upper(),
