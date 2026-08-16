@@ -544,3 +544,132 @@ async def structure(symbol: str, interval: str):
         "interval": interval,
         "structure": structure_result,
     }
+TIMEFRAME_WEIGHTS = {
+    "1month": 20,
+    "1week": 18,
+    "1day": 16,
+    "4h": 14,
+    "1h": 12,
+    "30min": 8,
+    "15min": 7,
+    "5min": 5,
+}
+
+
+def calculate_bias_from_structure(structure):
+    trend = structure.get("trend", "NEUTRAL")
+
+    if trend == "BULLISH":
+        return 1
+
+    if trend == "BEARISH":
+        return -1
+
+    return 0
+
+
+def calculate_multi_timeframe_bias(all_structures):
+    """
+    Weighted multi-timeframe directional bias.
+
+    Returns:
+    - score from -100 to +100
+    - BULLISH / BEARISH / NEUTRAL
+    """
+
+    total_weight = 0
+    weighted_score = 0
+
+    timeframe_details = {}
+
+    for timeframe, weight in TIMEFRAME_WEIGHTS.items():
+
+        structure = all_structures.get(timeframe)
+
+        if not structure:
+            continue
+
+        trend_score = calculate_bias_from_structure(structure)
+
+        weighted_score += trend_score * weight
+        total_weight += weight
+
+        timeframe_details[timeframe] = {
+            "trend": structure.get("trend", "NEUTRAL"),
+            "weight": weight,
+            "score": trend_score * weight,
+        }
+
+    if total_weight == 0:
+        return {
+            "bias": "NEUTRAL",
+            "score": 0,
+            "timeframes": timeframe_details,
+        }
+
+    normalized_score = (weighted_score / total_weight) * 100
+
+    if normalized_score >= 35:
+        bias = "BULLISH"
+
+    elif normalized_score <= -35:
+        bias = "BEARISH"
+
+    else:
+        bias = "NEUTRAL"
+
+    return {
+        "bias": bias,
+        "score": round(normalized_score, 2),
+        "timeframes": timeframe_details,
+    }
+    @app.get("/bias/{symbol}")
+async def multi_timeframe_bias(symbol: str):
+
+    url = "https://api.twelvedata.com/time_series"
+
+    structures = {}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+
+        for timeframe in TIMEFRAME_WEIGHTS:
+
+            params = {
+                "symbol": symbol.upper(),
+                "interval": timeframe,
+                "outputsize": 100,
+                "apikey": TWELVE_DATA_API_KEY,
+            }
+
+            try:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+
+                result = response.json()
+
+                if "values" not in result:
+                    structures[timeframe] = {
+                        "trend": "NEUTRAL",
+                        "error": result,
+                    }
+                    continue
+
+                candles = list(reversed(result["values"]))
+
+                structures[timeframe] = detect_advanced_structure(
+                    candles
+                )
+
+            except Exception as e:
+
+                structures[timeframe] = {
+                    "trend": "NEUTRAL",
+                    "error": str(e),
+                }
+
+    bias_result = calculate_multi_timeframe_bias(structures)
+
+    return {
+        "symbol": symbol.upper(),
+        "multi_timeframe_bias": bias_result,
+    }
