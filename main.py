@@ -80,3 +80,51 @@ async def candles(symbol: str, interval: str):
         "interval": interval,
         "data": data,
     }
+
+TIMEFRAMES = [
+    "1month",
+    "1week",
+    "1day",
+    "4h",
+    "1h",
+    "30min",
+    "15min",
+    "5min",
+]
+
+
+@app.get("/multi-timeframe/{symbol}")
+async def multi_timeframe(symbol: str):
+
+    url = "https://api.twelvedata.com/time_series"
+
+    results = {}
+
+    async with httpx.AsyncClient(timeout=20) as client:
+
+        for timeframe in TIMEFRAMES:
+
+            params = {
+                "symbol": symbol.upper(),
+                "interval": timeframe,
+                "outputsize": 100,
+                "apikey": TWELVE_DATA_API_KEY,
+            }
+
+            try:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+
+                data = response.json()
+
+                results[timeframe] = data
+
+            except Exception as e:
+                results[timeframe] = {
+                    "error": str(e)
+                }
+
+    return {
+        "symbol": symbol.upper(),
+        "timeframes": results,
+    }
