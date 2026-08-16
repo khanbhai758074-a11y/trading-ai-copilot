@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 
 app = FastAPI(title="Trading AI Copilot")
 
@@ -30,90 +30,53 @@ async def market(symbol: str):
         "apikey": TWELVE_DATA_API_KEY,
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(url, params=params)
+        response.raise_for_status()
         data = response.json()
 
-        if data.get("status") == "error":
-            raise HTTPException(
-                status_code=400,
-                detail=data,
-            )
-
-        return {
-            "symbol": symbol.upper(),
-            "data": data,
-        }
-
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Market data request failed: {exc}",
-        )
+    return {
+        "symbol": symbol.upper(),
+        "data": data,
+    }
 
 
 @app.get("/candles/{symbol}/{interval}")
-async def candles(symbol: str, interval: str, outputsize: int = 100):
+async def candles(symbol: str, interval: str):
+
     allowed_intervals = {
-        "1min",
-        "5min",
-        "15min",
-        "30min",
-        "1h",
-        "4h",
-        "1day",
-        "1week",
         "1month",
+        "1week",
+        "1day",
+        "4h",
+        "1h",
+        "30min",
+        "15min",
+        "5min",
     }
 
     if interval not in allowed_intervals:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "Unsupported interval",
-                "allowed_intervals": sorted(allowed_intervals),
-            },
-        )
-
-    if outputsize < 1 or outputsize > 5000:
-        raise HTTPException(
-            status_code=400,
-            detail="outputsize must be between 1 and 5000",
-        )
+        return {
+            "error": "Invalid interval",
+            "allowed_intervals": list(allowed_intervals),
+        }
 
     url = "https://api.twelvedata.com/time_series"
 
     params = {
         "symbol": symbol.upper(),
         "interval": interval,
-        "outputsize": outputsize,
+        "outputsize": 100,
         "apikey": TWELVE_DATA_API_KEY,
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(url, params=params)
+        response.raise_for_status()
         data = response.json()
 
-        if data.get("status") == "error":
-            raise HTTPException(
-                status_code=400,
-                detail=data,
-            )
-
-        return {
-            "symbol": symbol.upper(),
-            "interval": interval,
-            "candles": data,
-        }
-
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Candle data request failed: {exc}",
-        )
+    return {
+        "symbol": symbol.upper(),
+        "interval": interval,
+        "data": data,
+    }
